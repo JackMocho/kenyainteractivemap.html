@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Map Application for Nairobi</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+    #map {
+      width: 100vw;
+      height: 90vh;
+    }
+    #search-box {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+      padding: 5px;
+      width: 300px;
+      font-size: 16px;
+    }
+    .leaflet-tooltip {
+      background-color: rgba(255, 255, 255, 0.9);
+      border: 1px solid #ccc;
+      padding: 5px;
+      font-size: 14px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Search Box -->
+  <input type="text" id="search-box" placeholder="Search location..." />
+
+  <!-- Map Container -->
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+  <script>
+    var map = L.map('map').setView([-1.2921, 36.8219], 13);
+    var streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    });
+
+    var satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    });
+
+    var terrainMap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: 'Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)'
+    });
+    streetMap.addTo(map);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    var geojsonData = {
+      "type": "FeatureCollection",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [36.7861, -1.3216] // Nairobi National Park
+          },
+          "properties": {
+            "name": "Nairobi National Park",
+            "description": "A wildlife park located just a few kilometers from Nairobi's city center."
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [36.8219, -1.2921] // Uhuru Park
+          },
+          "properties": {
+            "name": "Uhuru Park",
+            "description": "A large public park in Nairobi, known for its green spaces and recreational activities."
+          }
+        }
+      ]
+    };
+    L.geoJSON(geojsonData, {
+      onEachFeature: function (feature, layer) {
+        layer.bindPopup(`
+          <h3>${feature.properties.name}</h3>
+          <p>${feature.properties.description}</p>
+        `);
+        layer.on('mouseover', function () {
+          layer.bindTooltip(feature.properties.name, { permanent: false, sticky: true }).openTooltip();
+        });
+
+        layer.on('mouseout', function () {
+          layer.closeTooltip();
+        });
+      }
+    }).addTo(map);
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+    var drawControl = new L.Control.Draw({
+      edit: {
+        featureGroup: drawnItems
+      },
+      draw: {
+        polygon: true,
+        polyline: true,
+        rectangle: true,
+        circle: true,
+        marker: true
+      }
+    });
+    map.addControl(drawControl);
+    map.on(L.Draw.Event.CREATED, function (event) {
+      var layer = event.layer;
+      drawnItems.addLayer(layer);
+    });
+    document.getElementById('search-box').addEventListener('keyup', function () {
+      var query = this.value;
+
+      if (query.length > 3) {
+        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.length > 0) {
+              var location = data[0];
+              var lat = parseFloat(location.lat);
+              var lon = parseFloat(location.lon);
+              map.flyTo([lat, lon], 15);
+              var marker = L.marker([lat, lon]).addTo(map)
+                .bindPopup(`<b>${location.display_name}</b>`);
+              marker.on('mouseover', function () {
+                marker.bindTooltip(location.display_name, { permanent: false, sticky: true }).openTooltip();
+              });
+
+              marker.on('mouseout', function () {
+                marker.closeTooltip();
+              });
+            }
+          })
+          .catch(error => console.error('Error fetching geocoding data:', error));
+      }
+    });
+    var baseMaps = {
+      "Streets": streetMap,
+      "Satellite": satelliteMap,
+      "Terrain": terrainMap
+    };
+
+    L.control.layers(baseMaps).addTo(map);
+  </script>
+</body>
+</html>
